@@ -1,0 +1,11 @@
+# GBNF grammar generated from training/schema.py (FraudSynthesized.model_json_schema()).
+# Do not edit by hand: regenerate with `python generate_gbnf.py`.
+# Start symbol: root
+ws ::= | " " | "\n" [ \t]{0,20}
+boolean ::= ("true" | "false") ws
+string ::= "\"" ( [^"\\\x7F\x00-\x1F] | "\\" (["\\bfnrt"] | "u" [0-9a-fA-F]{4}) )* "\"" ws
+enum_source_type ::= ("\"STREAM_ASR\"" | "\"WHATSAPP_DIRECT\"" | "\"WHATSAPP_GROUP\"" | "\"SMS\"" | "\"EMAIL\"") ws
+enum_risk_level ::= ("\"LOW\"" | "\"MEDIUM\"" | "\"HIGH\"" | "\"CRITICAL\"") ws
+enum_scam_type ::= ("\"None\"" | "\"Falso Familiar / Extorsión Policial\"" | "\"Phishing / Suplantación Bancaria\"" | "\"Suplantación Entidad Pública (Aduana / Impuestos)\"" | "\"Fraude de Telecomunicaciones / Falso Soporte\"") ws
+object ::= "{" ws "\"source_type\"" ws ":" ws enum_source_type "," ws "\"simulated_raw_text\"" ws ":" ws string "," ws "\"rationale\"" ws ":" ws string "," ws "\"is_scam\"" ws ":" ws boolean "," ws "\"risk_level\"" ws ":" ws enum_risk_level "," ws "\"scam_type\"" ws ":" ws enum_scam_type ws "}"
+root ::= object

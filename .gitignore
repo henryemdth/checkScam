@@ -1,0 +1,15 @@
+.gradle/
+build/
+.idea/
+*.iml
+.kotlin/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+.opencode/
+*.gguf
+*.bin
+
+MEMORY.md
+AGENTS.md

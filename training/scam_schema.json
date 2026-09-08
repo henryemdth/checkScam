@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "MessageSource": {
+      "enum": [
+        "STREAM_ASR",
+        "WHATSAPP_DIRECT",
+        "WHATSAPP_GROUP",
+        "SMS",
+        "EMAIL"
+      ],
+      "title": "MessageSource",
+      "type": "string"
+    },
+    "RiskLevel": {
+      "enum": [
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "CRITICAL"
+      ],
+      "title": "RiskLevel",
+      "type": "string"
+    },
+    "ScamType": {
+      "enum": [
+        "None",
+        "Falso Familiar / Extorsión Policial",
+        "Phishing / Suplantación Bancaria",
+        "Suplantación Entidad Pública (Aduana / Impuestos)",
+        "Fraude de Telecomunicaciones / Falso Soporte"
+      ],
+      "title": "ScamType",
+      "type": "string"
+    }
+  },
+  "description": "Structured output from Gemini for fraud classification.",
+  "properties": {
+    "source_type": {
+      "$ref": "#/$defs/MessageSource",
+      "description": "Canal por donde ocurrió el fraude según el relato."
+    },
+    "simulated_raw_text": {
+      "description": "Reconstrucción exacta de lo que dijo o escribió el estafador. Usa modismos locales (ej. 'megas', 'tigo'). Si es llamada (ASR), escribe en minúsculas y sin puntuación. Omite nombres reales de las víctimas.",
+      "title": "Simulated Raw Text",
+      "type": "string"
+    },
+    "rationale": {
+      "description": "Análisis técnico de 1 a 2 oraciones sobre el modus operandi y la coerción utilizada.",
+      "title": "Rationale",
+      "type": "string"
+    },
+    "is_scam": {
+      "description": "Verdadero si es un intento de fraude.",
+      "title": "Is Scam",
+      "type": "boolean"
+    },
+    "risk_level": {
+      "$ref": "#/$defs/RiskLevel",
+      "description": "Nivel de riesgo del intento de fraude."
+    },
+    "scam_type": {
+      "$ref": "#/$defs/ScamType",
+      "description": "Categoría en la que encaja el fraude."
+    }
+  },
+  "required": [
+    "source_type",
+    "simulated_raw_text",
+    "rationale",
+    "is_scam",
+    "risk_level",
+    "scam_type"
+  ],
+  "title": "FraudSynthesized",
+  "type": "object"
+}

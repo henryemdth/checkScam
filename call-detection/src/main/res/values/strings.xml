@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">CheckScam uses this service to detect when you are on a phone call. It monitors the call screen to determine call state (incoming, active, ended) and does not read or record any content.</string>
+</resources>
