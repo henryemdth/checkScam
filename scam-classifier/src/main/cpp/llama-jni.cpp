@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <android/log.h>
 
+#include <chrono>
 #include <cstdint>
 #include <fstream>
 #include <mutex>
@@ -83,27 +84,53 @@ Java_com_checkscam_classifier_LlamaEngineImpl_nativeInitialize(
 
     llama_backend_init();
 
-    llama_model_params mparams = llama_model_default_params();
-    mparams.n_gpu_layers = 0;
+    try {
+        llama_model_params mparams = llama_model_default_params();
+        mparams.n_gpu_layers = 0;
 
-    g_model = llama_model_load_from_file(model_path.c_str(), mparams);
-    if (g_model == nullptr) {
-        LOGE("Failed to load GGUF model from %s", model_path.c_str());
+        g_model = llama_model_load_from_file(model_path.c_str(), mparams);
+        if (g_model == nullptr) {
+            LOGE("Failed to load GGUF model from %s", model_path.c_str());
+            g_grammar.clear();
+            return 0;
+        }
+
+        llama_context_params cparams = llama_context_default_params();
+        cparams.n_ctx = static_cast<uint32_t>(nCtx);
+        cparams.n_threads = N_THREADS;
+        cparams.n_threads_batch = N_THREADS;
+
+        g_ctx = llama_init_from_model(g_model, cparams);
+        if (g_ctx == nullptr) {
+            LOGE("Failed to create llama context (n_ctx=%d)", nCtx);
+            llama_model_free(g_model);
+            g_model = nullptr;
+            g_grammar.clear();
+            return 0;
+        }
+    } catch (const std::exception& e) {
+        LOGE("nativeInitialize exception: %s", e.what());
         g_grammar.clear();
+        if (g_ctx != nullptr) {
+            llama_free(g_ctx);
+            g_ctx = nullptr;
+        }
+        if (g_model != nullptr) {
+            llama_model_free(g_model);
+            g_model = nullptr;
+        }
         return 0;
-    }
-
-    llama_context_params cparams = llama_context_default_params();
-    cparams.n_ctx = static_cast<uint32_t>(nCtx);
-    cparams.n_threads = N_THREADS;
-    cparams.n_threads_batch = N_THREADS;
-
-    g_ctx = llama_init_from_model(g_model, cparams);
-    if (g_ctx == nullptr) {
-        LOGE("Failed to create llama context (n_ctx=%d)", nCtx);
-        llama_model_free(g_model);
-        g_model = nullptr;
+    } catch (...) {
+        LOGE("nativeInitialize unknown exception");
         g_grammar.clear();
+        if (g_ctx != nullptr) {
+            llama_free(g_ctx);
+            g_ctx = nullptr;
+        }
+        if (g_model != nullptr) {
+            llama_model_free(g_model);
+            g_model = nullptr;
+        }
         return 0;
     }
 
@@ -136,8 +163,13 @@ Java_com_checkscam_classifier_LlamaEngineImpl_nativeClassify(JNIEnv* env, jobjec
         return env->NewStringUTF("");
     }
 
-    // Tokenize the prompt (two-pass: size query, then fill buffer).
-    int32_t n_prompt = llama_tokenize(g_vocab, prompt_str.c_str(), -1, nullptr, 0, false, true);
+    try {
+        // Tokenize the prompt (two-pass: size query, then fill buffer).
+    // NOTE: pass the real byte length, never -1: llama_vocab::tokenize builds
+    // std::string(text, text_len) and (size_t)-1 throws std::length_error,
+    // which must not escape the JNI boundary.
+    const int32_t prompt_len = static_cast<int32_t>(prompt_str.length());
+    int32_t n_prompt = llama_tokenize(g_vocab, prompt_str.c_str(), prompt_len, nullptr, 0, false, true);
     if (n_prompt < 0) {
         n_prompt = -n_prompt;
     }
@@ -152,7 +184,7 @@ Java_com_checkscam_classifier_LlamaEngineImpl_nativeClassify(JNIEnv* env, jobjec
     }
 
     std::vector<llama_token> toks(n_prompt);
-    const int32_t n_tok = llama_tokenize(g_vocab, prompt_str.c_str(), -1,
+    const int32_t n_tok = llama_tokenize(g_vocab, prompt_str.c_str(), prompt_len,
                                          toks.data(), static_cast<int32_t>(toks.size()), false, true);
     if (n_tok <= 0) {
         return env->NewStringUTF("");
@@ -168,6 +200,7 @@ Java_com_checkscam_classifier_LlamaEngineImpl_nativeClassify(JNIEnv* env, jobjec
         LOGE("llama_batch_init (prompt) OOM");
         return env->NewStringUTF("");
     }
+    pb.n_tokens = n_prompt;  // llama_batch_init leaves this 0; llama_decode rejects empty batches
     for (int32_t i = 0; i < n_prompt; ++i) {
         pb.token[i] = toks[i];
         pb.pos[i] = i;
@@ -175,6 +208,7 @@ Java_com_checkscam_classifier_LlamaEngineImpl_nativeClassify(JNIEnv* env, jobjec
         pb.seq_id[i][0] = 0;
         pb.logits[i] = (i == n_prompt - 1);
     }
+    const auto t_prompt_start = std::chrono::steady_clock::now();
     if (llama_decode(g_ctx, pb) != 0) {
         LOGE("llama_decode (prompt) failed");
         llama_batch_free(pb);
@@ -229,6 +263,12 @@ Java_com_checkscam_classifier_LlamaEngineImpl_nativeClassify(JNIEnv* env, jobjec
         }
         if (len > 0) {
             output.append(piece, static_cast<size_t>(len));
+            // TTFT: first decode (prompt) -> first decoded output token.
+            if (i == 0) {
+                const auto us = std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - t_prompt_start).count();
+                LOGI("LLAMA_TTFT_MS=%lld", static_cast<long long>(us / 1000));
+            }
         }
 
         gen_batch.n_tokens = 1;
@@ -236,7 +276,7 @@ Java_com_checkscam_classifier_LlamaEngineImpl_nativeClassify(JNIEnv* env, jobjec
         gen_batch.pos[0] = cur_pos;
         gen_batch.n_seq_id[0] = 1;
         gen_batch.seq_id[0][0] = 0;
-        gen_batch.logits[0] = false;
+        gen_batch.logits[0] = true;
 
         if (llama_decode(g_ctx, gen_batch) != 0) {
             LOGE("llama_decode (generation) failed at step %d", i);
@@ -249,6 +289,13 @@ Java_com_checkscam_classifier_LlamaEngineImpl_nativeClassify(JNIEnv* env, jobjec
     llama_sampler_free(smpl);
 
     return env->NewStringUTF(output.c_str());
+    } catch (const std::exception& e) {
+        LOGE("nativeClassify exception: %s", e.what());
+        return env->NewStringUTF("");
+    } catch (...) {
+        LOGE("nativeClassify unknown exception");
+        return env->NewStringUTF("");
+    }
 }
 
 JNIEXPORT void JNICALL

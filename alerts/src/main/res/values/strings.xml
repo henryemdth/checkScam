@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_scam_alerts_name">Alerts de seguro de fraude</string>
+    <string name="channel_scam_alerts_description">Avisos en tiempo real cuando se detecta una conversación sospechosa</string>
+</resources>

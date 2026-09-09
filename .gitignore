@@ -10,6 +10,12 @@ captures/
 .opencode/
 *.gguf
 *.bin
+logcat*.txt
+*.log
+__pycache__/
+*.pyc
+.artifacts/
 
+push_models.sh
 MEMORY.md
 AGENTS.md

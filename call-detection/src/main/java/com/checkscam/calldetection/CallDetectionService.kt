@@ -4,11 +4,15 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.flow.StateFlow
 
-class CallDetectionService(private val context: Context) {
+class CallDetectionService(
+    private val context: Context,
+    stateManager: CallStateManager? = null
+) {
 
-    private val stateManager = CallStateManager(listener = { state, pkg ->
-        listener?.onCallStateChanged(state, pkg)
-    })
+    private val stateManager = stateManager
+        ?: CallStateManager(listener = { state, pkg ->
+            listener?.onCallStateChanged(state, pkg)
+        })
 
     private var telephonyDetector: TelephonyCallDetector? = null
     private var listener: CallDetectionListener? = null

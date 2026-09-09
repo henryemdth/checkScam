@@ -21,7 +21,7 @@ class WhisperEngineImpl(
 
     override fun initialize(modelPath: String) {
         check(!nativeInitialized) { "WhisperEngine already initialized" }
-        if (nativeInitialize(modelPath) != 0L) {
+        if (nativeInitialize(modelPath) == 0L) {
             throw IllegalStateException("Failed to initialize whisper model at $modelPath")
         }
         nativeInitialized = true

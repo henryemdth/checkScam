@@ -59,10 +59,23 @@ class AudioCaptureService : Service() {
 
     private fun startCapture() {
         _captureState.update { CaptureState.STARTING }
-        startForegroundCompat()
-        recorderManager.start(serviceScope)
-        _captureState.update { CaptureState.CAPTURING }
-        Log.d(TAG, "Capture started")
+        try {
+            startForegroundCompat()
+        } catch (e: Throwable) {
+            // ForegroundServiceStartNotAllowedException (service started from a
+            // background context, e.g. instrumented tests) must not kill the
+            // pipeline: continue capturing; the system may still schedule the
+            // process out, but live analysis keeps working meanwhile.
+            Log.w(TAG, "Foreground start not allowed; continuing degraded", e)
+        }
+        try {
+            recorderManager.start(serviceScope)
+            _captureState.update { CaptureState.CAPTURING }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Recorder start failed", e)
+            _captureState.update { CaptureState.STOPPED }
+        }
+        Log.d(TAG, "Capture start handled (state=${_captureState.value})")
     }
 
     private fun stopCapture() {

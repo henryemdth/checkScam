@@ -2,6 +2,8 @@ package com.checkscam.app.ui
 
 import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.checkscam.calldetection.NativeCallAccessibilityService
 import com.checkscam.calldetection.PermissionHelper
 
@@ -45,11 +48,20 @@ fun PermissionGuideScreen(
     var phoneStateGranted by remember {
         mutableStateOf(PermissionHelper.hasPhoneStatePermission(context))
     }
+    var notificationsGranted by remember {
+        mutableStateOf(hasPostNotificationsPermission(context))
+    }
 
     val phoneStateLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         phoneStateGranted = granted
+    }
+
+    val postNotificationsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        notificationsGranted = granted
     }
 
     Column(
@@ -100,6 +112,22 @@ fun PermissionGuideScreen(
             }
         )
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        PermissionItem(
+            title = "Notifications",
+            description = "Enables heads-up scam alerts (CRITICAL pulls over the dialer)",
+            enabled = notificationsGranted,
+            onOpenSettings = {
+                if (!notificationsGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    postNotificationsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else if (!notificationsGranted) {
+                    // Pre-API-33 the permission is granted at install time.
+                    notificationsGranted = true
+                }
+            }
+        )
+
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
@@ -107,6 +135,7 @@ fun PermissionGuideScreen(
                 accessibilityEnabled = PermissionHelper.isAccessibilityServiceEnabled(context, NativeCallAccessibilityService::class.java)
                 notificationListenerEnabled = PermissionHelper.isNotificationListenerEnabled(context)
                 phoneStateGranted = PermissionHelper.hasPhoneStatePermission(context)
+                notificationsGranted = hasPostNotificationsPermission(context)
                 if (!phoneStateGranted) {
                     phoneStateLauncher.launch(Manifest.permission.READ_PHONE_STATE)
                 } else if (accessibilityEnabled && notificationListenerEnabled) {
@@ -118,6 +147,14 @@ fun PermissionGuideScreen(
             Text("Check permissions")
         }
     }
+}
+
+private fun hasPostNotificationsPermission(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+    return ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.POST_NOTIFICATIONS
+    ) == PackageManager.PERMISSION_GRANTED
 }
 
 @Composable

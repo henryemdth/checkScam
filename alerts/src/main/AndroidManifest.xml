@@ -1,3 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Heads-up scam alerts (revocable on Android 13+); runtime-gated in AlertManager -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
 </manifest>

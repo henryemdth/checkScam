@@ -70,7 +70,8 @@ def build_grammar(schema: dict[str, Any]) -> str:
     for key, prop in properties.items():
         ptype = prop.get("type")
         if ptype == "string" and "enum" in prop:
-            ref = f"enum_{key}"
+            # Rule names must not contain '_' (llama.cpp's is_word_char excludes it).
+            ref = "enum" + "".join(part.capitalize() for part in key.split("_"))
             alternatives = " | ".join(
                 f'"\\"{_escape_literal(value)}\\""' for value in prop["enum"]
             )

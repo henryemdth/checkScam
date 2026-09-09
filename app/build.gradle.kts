@@ -45,6 +45,8 @@ android {
         // Model binaries are already densely quantized/compressed; skip AAPT2
         // compression to avoid heap pressure on 700MB+ assets.
         noCompress += listOf("gguf", "bin")
+        // Ignore large models during APK packaging to speed up ADB installs
+        ignoreAssetsPattern = "!*.gguf:!*.bin"
     }
 }
 
@@ -61,6 +63,7 @@ dependencies {
 
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -69,6 +72,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:rules:1.6.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
