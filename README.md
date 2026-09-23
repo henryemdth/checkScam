@@ -130,7 +130,22 @@ git lfs pull
 ./gradlew :app:installDebug
 ```
 
-**Tests:** 78 unit tests across `:app`, `:call-detection`, `:diarization`, and `:scam-classifier` (Debug + Release variants), zero network at runtime, no instrumented tests yet.
+**Models on device (required once):** the APK does **not** bundle the model
+binaries (`ignoreAssetsPattern` drops `*.gguf`/`*.bin`), so STT and scam
+analysis stay dormant until you import them from storage:
+
+```bash
+# 1. copy the models to the phone's Download folder
+adb push scam-classifier/src/main/assets/Llama-3.2-1B-Instruct-Q4_K_M.gguf /sdcard/Download/
+adb push stt-engine/src/main/assets/ggml-base.bin /sdcard/Download/
+
+# 2. in the app: Dashboard → "Import models" → pick the Download folder
+```
+
+`scam_schema.gbnf` is tiny and stays bundled. Alternatively `push_models.sh`
+(dev-only, `run-as`) places the files directly in internal storage.
+
+**Tests:** 103 unit tests across `:app`, `:call-detection`, `:diarization`, `:alerts`, and `:scam-classifier` (Debug + Release variants), zero network at runtime. Instrumented end-to-end test: `./gradlew :app:connectedDebugAndroidTest` (ARM64 device only; **uninstalls the app and wipes `filesDir`** — import the models again before running).
 
 ## Model artifacts (LFS-tracked)
 
@@ -140,21 +155,22 @@ git lfs pull
 | `scam-classifier/src/main/assets/Llama-3.2-1B-Instruct-Q4_K_M.gguf` | 771 MB | scam classifier |
 | `scam-classifier/src/main/assets/scam_schema.gbnf` | ~1 KB | GBNF JSON constraint |
 
-Native libs are built as a single static `.so` per ABI (`libstt-engine.so`, `libscam-classifier.so`; `c++_static`, no bundled `libc++_shared`). Large binaries are excluded from AAPT2 compression (`noCompress += gguf, bin`) to keep builds fast and heap-friendly.
+Native libs are built as a single static `.so` per ABI (`libstt-engine.so`, `libscam-classifier.so`; `c++_static`, no bundled `libc++_shared`). Large binaries are excluded from AAPT2 compression (`noCompress += gguf, bin`) **and from the APK entirely** (`ignoreAssetsPattern`) — they are imported from storage via `ModelImporter` into `filesDir`. APK size ≈15 MB; first-run import ≈920 MB on disk.
 
 ## Roadmap status
 
-Currently at **Phase 5 complete**.
+Currently at **Phases 1→7 complete** (end-to-end pipeline device-verified) + **Phase 7.1 Live Diagnostic Console done** (next: Phase 8 fine-tuning).
 
 | Phase | Status |
 |---|---|
 | 1. Call detection | ✅ Done |
-| 2. Audio capture | ✅ Done (runtime permission prompts pending) |
+| 2. Audio capture | ✅ Done |
 | 3. STT (whisper.cpp) | ✅ Done |
 | 4. Diarization | ✅ Done |
 | 5. Scam classifier (on-device SLM) | ✅ Done |
-| 6. Alerts & in-app UI | 🔜 Pending |
-| 7. End-to-end pipeline + fixtures + benchmarks | 🔜 Pending |
+| 6. Alerts & in-app UI | ✅ Done |
+| 7. End-to-end pipeline + fixtures + benchmarks | ✅ Done (SM-S928B, 3 fixtures GREEN) |
+| 7.1. Live Diagnostic Console & Pipeline Observability | ✅ Done |
 | 8. Dataset & fine-tuning (post-MVP) | 🔜 Pending |
 
 See [`MEMORY.md`](MEMORY.md) for the full itemized status and [`AGENTS.md`](AGENTS.md) for the engineering spec, constraints, and conventions.

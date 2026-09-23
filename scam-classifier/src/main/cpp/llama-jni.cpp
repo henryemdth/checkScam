@@ -8,6 +8,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <atomic>
 
 #include "llama.h"
 
@@ -31,6 +32,7 @@ std::string g_grammar;
 std::mutex g_mutex;
 
 uint32_t g_n_ctx = 0;
+std::atomic<int64_t> g_last_ttft_us{0};
 
 bool read_file(const std::string& path, std::string& out) {
     std::ifstream f(path, std::ios::binary);
@@ -267,6 +269,7 @@ Java_com_checkscam_classifier_LlamaEngineImpl_nativeClassify(JNIEnv* env, jobjec
             if (i == 0) {
                 const auto us = std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::steady_clock::now() - t_prompt_start).count();
+                g_last_ttft_us = us;
                 LOGI("LLAMA_TTFT_MS=%lld", static_cast<long long>(us / 1000));
             }
         }
@@ -296,6 +299,11 @@ Java_com_checkscam_classifier_LlamaEngineImpl_nativeClassify(JNIEnv* env, jobjec
         LOGE("nativeClassify unknown exception");
         return env->NewStringUTF("");
     }
+}
+
+JNIEXPORT jlong JNICALL
+Java_com_checkscam_classifier_LlamaEngineImpl_nativeLastTtftMs(JNIEnv* /*env*/, jobject /*thiz*/) {
+    return g_last_ttft_us.load() / 1000;
 }
 
 JNIEXPORT void JNICALL

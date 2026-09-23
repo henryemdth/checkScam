@@ -35,11 +35,14 @@ class CallStateManager(private val listener: CallDetectionListener) {
     }
 
     private fun validateTransition(from: CallState, to: CallState): Boolean {
+        if (from == to) return false
         return when (from) {
             CallState.IDLE -> to == CallState.INCOMING || to == CallState.IN_PROGRESS
             CallState.INCOMING -> to == CallState.IN_PROGRESS || to == CallState.ENDED || to == CallState.IDLE
             CallState.IN_PROGRESS -> to == CallState.ENDED || to == CallState.IDLE
-            CallState.ENDED -> to == CallState.IDLE
+            // If the state is ENDED, allow going back directly to INCOMING or IN_PROGRESS 
+            // to support rapid back-to-back calls without explicitly waiting for an IDLE signal.
+            CallState.ENDED -> to == CallState.IDLE || to == CallState.INCOMING || to == CallState.IN_PROGRESS
         }
     }
 

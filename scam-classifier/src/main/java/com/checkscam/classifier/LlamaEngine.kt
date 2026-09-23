@@ -22,6 +22,9 @@ interface LlamaEngine {
     /** Drops KV cache state so the next call starts from a fresh sequence. */
     fun reset()
 
+    /** Exact native time-to-first-token (ms) of the last [classify] call; 0 if never measured. */
+    fun lastTtftMs(): Long = 0L
+
     /** Frees the native model + context. Safe to call multiple times. */
     fun release()
 

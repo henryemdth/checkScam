@@ -1,6 +1,7 @@
 package com.checkscam.diarization
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DiarizationPipelineTest {
@@ -76,5 +77,34 @@ class DiarizationPipelineTest {
                 "<SPEAKER_A> colgare la llamada",
             pipeline.snapshot()
         )
+    }
+
+    @Test
+    fun onTurn_reportsAttributionPerWindow() {
+        val turns = mutableListOf<String>()
+        val observed = DiarizationPipeline(analyzer, onTurn = { turns.add(it) })
+        observed.process(input("hola buenos dias", 1500f))
+        observed.process(input("que necesita", 4000f))
+        observed.process(input("es urgente", 1600f))
+
+        assertEquals(3, turns.size)
+        assertTrue(turns[0].contains("<SPEAKER_B> hola buenos dias"))
+        assertTrue(turns[1].contains("<SPEAKER_A> que necesita"))
+        assertTrue(turns[2].contains("<SPEAKER_B> es urgente"))
+    }
+
+    @Test
+    fun onTurn_reporting_doesNotAlterDownstreamOutput() {
+        val turns = mutableListOf<String>()
+        val observed = DiarizationPipeline(analyzer, onTurn = { turns.add(it) })
+        observed.process(input("hola buenos dias", 1500f))
+        observed.process(input("que necesita", 4200f))
+
+        val plain = DiarizationPipeline(analyzer)
+        plain.process(input("hola buenos dias", 1500f))
+        plain.process(input("que necesita", 4200f))
+
+        assertEquals(plain.snapshot(), observed.snapshot())
+        assertEquals(2, turns.size)
     }
 }

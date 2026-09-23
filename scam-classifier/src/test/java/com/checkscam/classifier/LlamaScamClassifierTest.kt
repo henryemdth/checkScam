@@ -12,6 +12,7 @@ class LlamaScamClassifierTest {
     ) : LlamaEngine {
         var lastPrompt: String = ""
         var released = false
+        var ttft = 0L
 
         override fun initialize(modelPath: String, grammarPath: String, nCtx: Int) {
             // no native state; init is a no-op for the fake
@@ -23,6 +24,8 @@ class LlamaScamClassifierTest {
         }
 
         override fun reset() = Unit
+
+        override fun lastTtftMs(): Long = ttft
 
         override fun release() {
             released = true
@@ -116,5 +119,25 @@ class LlamaScamClassifierTest {
         classifier.release()
 
         assertTrue(engine.released)
+    }
+
+    @Test
+    fun `onRawOutput receives exact native output before parsing`() {
+        val engine = FakeEngine(result = json)
+        var seen = ""
+        val classifier = LlamaScamClassifier(engine, onRawOutput = { seen = it })
+
+        val result = classifier.classify("hola")
+
+        assertEquals(json, seen)
+        assertTrue(result.isScam)
+    }
+
+    @Test
+    fun `lastTtftMs forwards engine metric`() {
+        val engine = FakeEngine(result = json).apply { ttft = 2407L }
+        val classifier = LlamaScamClassifier(engine)
+
+        assertEquals(2407L, classifier.lastTtftMs())
     }
 }

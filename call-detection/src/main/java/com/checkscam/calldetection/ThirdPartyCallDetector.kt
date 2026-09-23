@@ -10,18 +10,17 @@ class ThirdPartyCallDetector : NotificationListenerService() {
     private data class ActiveNotification(val packageName: String, val text: String)
 
     private var stateManager: CallStateManager? = null
+    private var notificationTextListener: ((String, String) -> Unit)? = null
     private val activeNotifications = mutableMapOf<String, ActiveNotification>()
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
         val packageName = sbn.packageName
-        if (!SupportedApps.isSupported(packageName)) return
+        val combinedText = combinedTextOf(sbn)
 
-        val extras = sbn.notification.extras
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
-        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
-        val combinedText = "$title $text $bigText"
+        notificationTextListener?.invoke(packageName, combinedText)
+
+        if (!SupportedApps.isSupported(packageName)) return
 
         Log.d(TAG, "Notification from $packageName: $combinedText")
 
@@ -39,6 +38,9 @@ class ThirdPartyCallDetector : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         if (sbn == null) return
         val packageName = sbn.packageName
+
+        notificationTextListener?.invoke(packageName, "notification removed")
+
         if (!SupportedApps.isSupported(packageName)) return
 
         activeNotifications.remove(sbn.key)
@@ -64,8 +66,30 @@ class ThirdPartyCallDetector : NotificationListenerService() {
         this.stateManager = manager
     }
 
+    /** Optional live stream of every posted/removed notification, regardless of supported-app gate. */
+    fun setNotificationTextListener(listener: (String, String) -> Unit) {
+        this.notificationTextListener = listener
+    }
+
     companion object {
         private const val TAG = "ThirdPartyCallDetector"
+        private const val MAX_TEXT_CHARS = 300
+
+        private fun combinedTextOf(sbn: StatusBarNotification): String {
+            val extras = sbn.notification.extras
+            return formatNotificationText(
+                title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: "",
+                text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: "",
+                bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
+            )
+        }
+
+        internal fun formatNotificationText(
+            title: String,
+            text: String,
+            bigText: String,
+            maxChars: Int = MAX_TEXT_CHARS
+        ): String = "$title $text $bigText".trim().take(maxChars)
 
         private var instance: ThirdPartyCallDetector? = null
 
@@ -75,6 +99,13 @@ class ThirdPartyCallDetector : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         instance = this
+        // Pick up wiring even if [CallDetectionService.start] ran before this
+        // listener bound (system-side async bind).
+        stateManager = CallStateWire.stateManager
+        notificationTextListener = CallStateWire.notificationTextSink
+        if (stateManager != null || notificationTextListener != null) {
+            Log.d(TAG, "Attached to CallStateWire")
+        }
     }
 
     override fun onListenerDisconnected() {

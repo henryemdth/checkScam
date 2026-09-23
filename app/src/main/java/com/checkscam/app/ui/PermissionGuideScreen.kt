@@ -2,7 +2,6 @@ package com.checkscam.app.ui
 
 import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,9 +29,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import com.checkscam.calldetection.NativeCallAccessibilityService
 import com.checkscam.calldetection.PermissionHelper
+import kotlinx.coroutines.delay
 
 @Composable
 fun PermissionGuideScreen(
@@ -39,6 +39,7 @@ fun PermissionGuideScreen(
     onAllPermissionsGranted: () -> Unit = {}
 ) {
     val context = LocalContext.current
+
     var accessibilityEnabled by remember {
         mutableStateOf(PermissionHelper.isAccessibilityServiceEnabled(context, NativeCallAccessibilityService::class.java))
     }
@@ -48,20 +49,50 @@ fun PermissionGuideScreen(
     var phoneStateGranted by remember {
         mutableStateOf(PermissionHelper.hasPhoneStatePermission(context))
     }
+    var recordAudioGranted by remember {
+        mutableStateOf(PermissionHelper.hasRecordAudioPermission(context))
+    }
     var notificationsGranted by remember {
-        mutableStateOf(hasPostNotificationsPermission(context))
+        mutableStateOf(PermissionHelper.hasPostNotificationsPermission(context))
     }
 
-    val phoneStateLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        phoneStateGranted = granted
+    fun refreshPermissionStates() {
+        accessibilityEnabled = PermissionHelper.isAccessibilityServiceEnabled(context, NativeCallAccessibilityService::class.java)
+        notificationListenerEnabled = PermissionHelper.isNotificationListenerEnabled(context)
+        phoneStateGranted = PermissionHelper.hasPhoneStatePermission(context)
+        recordAudioGranted = PermissionHelper.hasRecordAudioPermission(context)
+        notificationsGranted = PermissionHelper.hasPostNotificationsPermission(context)
     }
 
-    val postNotificationsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        notificationsGranted = granted
+    val runtimePermissionsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ ->
+        refreshPermissionStates()
+        if (PermissionHelper.areAllPermissionsGranted(context)) {
+            onAllPermissionsGranted()
+        }
+    }
+
+    fun launchMissingRuntimePermissions() {
+        val missing = buildList {
+            if (!PermissionHelper.hasPhoneStatePermission(context)) add(Manifest.permission.READ_PHONE_STATE)
+            if (!PermissionHelper.hasRecordAudioPermission(context)) add(Manifest.permission.RECORD_AUDIO)
+            if (!PermissionHelper.hasPostNotificationsPermission(context)) add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (missing.isNotEmpty()) {
+            runtimePermissionsLauncher.launch(missing.toTypedArray())
+        }
+    }
+
+    // Auto-advance when the user returns from the system settings having
+    // enabled the accessibility service / notification listener toggles.
+    LaunchedEffect(context) {
+        while (true) {
+            delay(POLL_PERMISSIONS_MS)
+            if (PermissionHelper.areAllPermissionsGranted(context)) {
+                onAllPermissionsGranted()
+            }
+        }
     }
 
     Column(
@@ -84,8 +115,32 @@ fun PermissionGuideScreen(
             description = "Allows detecting native calls via the telephony service",
             enabled = phoneStateGranted,
             onOpenSettings = {
-                if (!phoneStateGranted) {
-                    phoneStateLauncher.launch(Manifest.permission.READ_PHONE_STATE)
+                if (!phoneStateGranted) launchMissingRuntimePermissions()
+            }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        PermissionItem(
+            title = "Microphone",
+            description = "Allows capturing call audio for on-device analysis",
+            enabled = recordAudioGranted,
+            onOpenSettings = {
+                if (!recordAudioGranted) launchMissingRuntimePermissions()
+            }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        PermissionItem(
+            title = "Notifications",
+            description = "Enables heads-up scam alerts (CRITICAL pulls over the dialer)",
+            enabled = notificationsGranted,
+            onOpenSettings = {
+                if (!notificationsGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    launchMissingRuntimePermissions()
+                } else if (!notificationsGranted) {
+                    notificationsGranted = true
                 }
             }
         )
@@ -112,34 +167,15 @@ fun PermissionGuideScreen(
             }
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        PermissionItem(
-            title = "Notifications",
-            description = "Enables heads-up scam alerts (CRITICAL pulls over the dialer)",
-            enabled = notificationsGranted,
-            onOpenSettings = {
-                if (!notificationsGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    postNotificationsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else if (!notificationsGranted) {
-                    // Pre-API-33 the permission is granted at install time.
-                    notificationsGranted = true
-                }
-            }
-        )
-
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
             onClick = {
-                accessibilityEnabled = PermissionHelper.isAccessibilityServiceEnabled(context, NativeCallAccessibilityService::class.java)
-                notificationListenerEnabled = PermissionHelper.isNotificationListenerEnabled(context)
-                phoneStateGranted = PermissionHelper.hasPhoneStatePermission(context)
-                notificationsGranted = hasPostNotificationsPermission(context)
-                if (!phoneStateGranted) {
-                    phoneStateLauncher.launch(Manifest.permission.READ_PHONE_STATE)
-                } else if (accessibilityEnabled && notificationListenerEnabled) {
+                refreshPermissionStates()
+                if (PermissionHelper.areAllPermissionsGranted(context)) {
                     onAllPermissionsGranted()
+                } else {
+                    launchMissingRuntimePermissions()
                 }
             },
             modifier = Modifier.fillMaxWidth()
@@ -149,13 +185,7 @@ fun PermissionGuideScreen(
     }
 }
 
-private fun hasPostNotificationsPermission(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
-    return ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.POST_NOTIFICATIONS
-    ) == PackageManager.PERMISSION_GRANTED
-}
+private const val POLL_PERMISSIONS_MS = 800L
 
 @Composable
 private fun PermissionItem(

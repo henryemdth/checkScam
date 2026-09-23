@@ -16,6 +16,7 @@ class CallDetectionService(
 
     private var telephonyDetector: TelephonyCallDetector? = null
     private var listener: CallDetectionListener? = null
+    private var notificationTextListener: ((String, String) -> Unit)? = null
     private var running = false
 
     val state: CallState get() = stateManager.state
@@ -28,9 +29,19 @@ class CallDetectionService(
         this.listener = listener
     }
 
+    /** Optional live stream of notification text from all apps (see [ThirdPartyCallDetector]). */
+    fun setNotificationTextListener(listener: (String, String) -> Unit) {
+        this.notificationTextListener = listener
+    }
+
     fun start() {
         if (running) return
         Log.d(TAG, "Starting call detection")
+
+        // The OS-bound services connect asynchronously; the wire is re-read on
+        // connect so late-binding connections still get attached.
+        CallStateWire.stateManager = stateManager
+        CallStateWire.notificationTextSink = notificationTextListener
 
         telephonyDetector = TelephonyCallDetector(context, stateManager).also { it.start() }
 
@@ -39,6 +50,9 @@ class CallDetectionService(
 
         val notificationDetector = ThirdPartyCallDetector.getInstance()
         notificationDetector?.setStateManager(stateManager)
+        notificationDetector?.setNotificationTextListener { pkg, text ->
+            notificationTextListener?.invoke(pkg, text)
+        }
 
         running = true
         Log.d(TAG, "Call detection started")
@@ -52,6 +66,7 @@ class CallDetectionService(
         telephonyDetector = null
 
         stateManager.reset()
+        CallStateWire.clear()
         running = false
         Log.d(TAG, "Call detection stopped")
     }

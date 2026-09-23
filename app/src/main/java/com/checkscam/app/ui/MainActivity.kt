@@ -1,9 +1,12 @@
 package com.checkscam.app.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,10 +34,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.checkscam.app.CheckScamApplication
+import com.checkscam.app.ModelImporter
 import com.checkscam.app.data.SettingsRepository
+import com.checkscam.app.observability.LogStage
 import com.checkscam.app.ui.theme.CheckScamTheme
 import com.checkscam.calldetection.PermissionHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,15 +66,43 @@ fun MainScreen(modifier: Modifier = Modifier) {
     val detectionService = remember { app.callDetectionService }
     val audioCoordinator = remember { app.callAudioCoordinator }
     val historyStore = remember { app.alertHistoryStore }
+    val logBuffer = remember { app.appLogBuffer }
 
     var settingsLoaded by remember { mutableStateOf(false) }
     var consentAccepted by remember { mutableStateOf(false) }
     var permissionsGranted by remember {
         mutableStateOf(PermissionHelper.areAllPermissionsGranted(context))
     }
+    var modelsReady by remember { mutableStateOf(ModelImporter.areModelsImported(context)) }
+    var importingModels by remember { mutableStateOf(false) }
+    var importSummary by remember { mutableStateOf<String?>(null) }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver
+                    .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            importingModels = true
+            scope.launch {
+                val result = ModelImporter.importFolder(context, uri)
+                withContext(Dispatchers.Main) {
+                    importingModels = false
+                    importSummary = result.summary
+                    logBuffer.log(LogStage.SYSTEM, result.summary)
+                    modelsReady = result.isComplete || ModelImporter.areModelsImported(context)
+                    if (modelsReady) audioCoordinator.onModelsImported()
+                }
+            }
+        }
+    }
 
     val pipelineStatus by audioCoordinator.status.collectAsStateWithLifecycle()
     val history by historyStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
+    val diagnostics by logBuffer.entries.collectAsStateWithLifecycle()
+    var diagnosticsAutoScroll by rememberSaveable { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         consentAccepted = settings.isDetectionEnabled()
@@ -109,6 +145,10 @@ fun MainScreen(modifier: Modifier = Modifier) {
         modifier = modifier,
         status = pipelineStatus,
         history = history,
+        modelsReady = modelsReady,
+        importingModels = importingModels,
+        importSummary = importSummary,
+        onImportModels = { importLauncher.launch(null) },
         onClearHistory = {
             scope.launch { historyStore.clear() }
         },
@@ -117,7 +157,11 @@ fun MainScreen(modifier: Modifier = Modifier) {
             detectionService.stop()
             settings.setDetectionEnabled(false)
             consentAccepted = false
-        }
+        },
+        diagnostics = diagnostics,
+        diagnosticsAutoScroll = diagnosticsAutoScroll,
+        onToggleAutoscroll = { diagnosticsAutoScroll = !diagnosticsAutoScroll },
+        onClearDiagnostics = { logBuffer.clear() }
     )
 }
 

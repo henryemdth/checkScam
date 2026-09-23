@@ -28,7 +28,8 @@ import com.checkscam.classifier.RiskLevel
  *   spam the user during a single call.
  */
 class AlertManager(
-    context: Context
+    context: Context,
+    private val onDecision: ((String) -> Unit)? = null
 ) {
 
     private val appContext = context.applicationContext
@@ -44,13 +45,15 @@ class AlertManager(
     @SuppressLint("MissingPermission")
     fun showAlert(result: FraudSynthesized) {
         val dangerous = result.isScam || result.riskLevel != RiskLevel.LOW
+        val notificationsEnabled = notificationsEnabled()
+        val key = alertKey(result)
+        val duplicate = isDuplicateOfLatest(key, lastAlertKey, System.currentTimeMillis() - lastAlertAtMs)
+        onDecision?.invoke(decisionMessage(dangerous, notificationsEnabled, duplicate, result, key))
         if (!dangerous) return
-        if (!notificationsEnabled()) return
-
-        val now = System.currentTimeMillis()
-        if (isDuplicateOfLatest(alertKey(result), lastAlertKey, now - lastAlertAtMs)) return
-        lastAlertKey = alertKey(result)
-        lastAlertAtMs = now
+        if (!notificationsEnabled) return
+        if (duplicate) return
+        lastAlertKey = key
+        lastAlertAtMs = System.currentTimeMillis()
 
         val notification = buildNotification(result)
         try {
@@ -149,5 +152,23 @@ class AlertManager(
             elapsedSinceLatestMs: Long,
             windowMs: Long = DEDUPE_WINDOW_MS
         ): Boolean = latestKey != null && key == latestKey && elapsedSinceLatestMs < windowMs
+
+        /**
+         * Pure decision-message mapping for the diagnostic console (AGENTS.md §5.6:
+         * "Alert trigger vs. dedupe suppression status"). No Android dependencies,
+         * unit-testable on the JVM.
+         */
+        fun decisionMessage(
+            dangerous: Boolean,
+            notificationsEnabled: Boolean,
+            duplicate: Boolean,
+            result: FraudSynthesized,
+            key: String
+        ): String = when {
+            !dangerous -> "SKIP not-dangerous risk=${result.riskLevel} isScam=${result.isScam}"
+            !notificationsEnabled -> "SKIP notifications-disabled risk=${result.riskLevel}"
+            duplicate -> "DEDUPED within ${DEDUPE_WINDOW_MS}ms key=$key"
+            else -> "DISPATCHED risk=${result.riskLevel} type=${result.scamType}"
+        }
     }
 }

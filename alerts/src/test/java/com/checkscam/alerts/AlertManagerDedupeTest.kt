@@ -59,4 +59,56 @@ class AlertManagerDedupeTest {
             )
         )
     }
+
+    @Test
+    fun `decisionMessage flags each non-dangerous outcome`() {
+        val risk = RiskLevel.LOW
+        val msg = AlertManager.decisionMessage(
+            dangerous = false,
+            notificationsEnabled = true,
+            duplicate = false,
+            result = result(risk = risk),
+            key = AlertManager.alertKey(result(risk = risk))
+        )
+        assertTrue(msg.startsWith("SKIP not-dangerous"))
+        assertTrue(msg.contains("risk=$risk"))
+    }
+
+    @Test
+    fun `decisionMessage flags disabled notifications`() {
+        val msg = AlertManager.decisionMessage(
+            dangerous = true,
+            notificationsEnabled = false,
+            duplicate = false,
+            result = result(),
+            key = "k"
+        )
+        assertTrue(msg.startsWith("SKIP notifications-disabled"))
+    }
+
+    @Test
+    fun `decisionMessage flags dedupe suppression`() {
+        val msg = AlertManager.decisionMessage(
+            dangerous = true,
+            notificationsEnabled = true,
+            duplicate = true,
+            result = result(),
+            key = "k"
+        )
+        assertTrue(msg.startsWith("DEDUPED"))
+        assertTrue(msg.contains("key=k"))
+    }
+
+    @Test
+    fun `decisionMessage flags dispatch`() {
+        val msg = AlertManager.decisionMessage(
+            dangerous = true,
+            notificationsEnabled = true,
+            duplicate = false,
+            result = result(),
+            key = "k"
+        )
+        assertTrue(msg.startsWith("DISPATCHED"))
+        assertTrue(msg.contains("type=${ScamType.TELECOM_FRAUD}"))
+    }
 }

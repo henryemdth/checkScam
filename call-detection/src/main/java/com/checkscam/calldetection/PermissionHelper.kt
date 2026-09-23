@@ -19,6 +19,21 @@ object PermissionHelper {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    fun hasRecordAudioPermission(context: Context): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    fun hasPostNotificationsPermission(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     fun isAccessibilityServiceEnabled(context: Context, serviceClass: Class<*>): Boolean {
         val serviceName = ComponentName(context, serviceClass).flattenToShortString()
         val enabledServices = Settings.Secure.getString(
@@ -59,6 +74,8 @@ object PermissionHelper {
     fun areAllPermissionsGranted(context: Context): Boolean {
         return isAccessibilityServiceEnabled(context, NativeCallAccessibilityService::class.java) &&
             isNotificationListenerEnabled(context) &&
-            hasPhoneStatePermission(context)
+            hasPhoneStatePermission(context) &&
+            hasRecordAudioPermission(context) &&
+            hasPostNotificationsPermission(context)
     }
 }

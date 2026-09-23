@@ -14,7 +14,8 @@ import kotlinx.coroutines.flow.asSharedFlow
  * matching the ChatML prompt format consumed by the scam classifier.
  */
 class DiarizationPipeline(
-    private val analyzer: AudioEnergyAnalyzer = AudioEnergyAnalyzer()
+    private val analyzer: AudioEnergyAnalyzer = AudioEnergyAnalyzer(),
+    private val onTurn: ((String) -> Unit)? = null
 ) {
 
     private val accumulated = StringBuilder()
@@ -26,6 +27,7 @@ class DiarizationPipeline(
     fun process(input: DiarizationInput) {
         if (input.text.isEmpty()) return
         val speaker = analyzer.classify(input.rms)
+        val attribution = tokenFor(speaker).ifEmpty { lastTokenOrEmpty() }
 
         when {
             // Silence: keep attribution to last speaker, append without token.
@@ -42,6 +44,7 @@ class DiarizationPipeline(
                 appendToCurrentTurn(input.text)
             }
         }
+        onTurn?.invoke("$attribution ${input.text.trim()} | rms=${"%.1f".format(input.rms)}")
         emit()
     }
 
@@ -71,6 +74,12 @@ class DiarizationPipeline(
         SpeakerGuess.SPEAKER_A -> "<SPEAKER_A>"
         SpeakerGuess.SPEAKER_B -> "<SPEAKER_B>"
         SpeakerGuess.SILENCE -> ""
+    }
+
+    private fun lastTokenOrEmpty(): String = when (lastSpeaker) {
+        SpeakerGuess.SPEAKER_A -> "<SPEAKER_A>"
+        SpeakerGuess.SPEAKER_B -> "<SPEAKER_B>"
+        else -> ""
     }
 
     companion object {

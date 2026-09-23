@@ -13,6 +13,12 @@ class NativeCallAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        // Pick up wiring even if [CallDetectionService.start] ran before this
+        // service bound (system-side async bind).
+        stateManager = CallStateWire.stateManager
+        if (stateManager != null) {
+            Log.d(TAG, "Attached to CallStateWire stateManager")
+        }
         serviceInfo = serviceInfo.apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC

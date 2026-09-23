@@ -55,6 +55,9 @@ class LlamaEngineImpl(
         }
     }
 
+    override fun lastTtftMs(): Long =
+        if (nativeInitialized) nativeLastTtftMs() else 0L
+
     override fun release() {
         if (nativeInitialized) {
             nativeRelease()
@@ -66,6 +69,7 @@ class LlamaEngineImpl(
     private external fun nativeClassify(prompt: String): String
     private external fun nativeReset()
     private external fun nativeRelease()
+    private external fun nativeLastTtftMs(): Long
 
     companion object {
         private const val TAG = "LlamaEngineImpl"

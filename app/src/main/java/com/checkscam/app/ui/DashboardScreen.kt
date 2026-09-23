@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -24,6 +26,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.checkscam.alerts.AlertRecord
 import com.checkscam.alerts.RiskVisual
 import com.checkscam.app.PipelineStatus
+import com.checkscam.app.observability.LogEntry
 import com.checkscam.app.ui.theme.CheckScamTheme
 import com.checkscam.classifier.FraudSynthesized
 import com.checkscam.classifier.RiskLevel
@@ -51,9 +58,18 @@ fun DashboardScreen(
     modifier: Modifier = Modifier,
     status: PipelineStatus = PipelineStatus.IDLE,
     history: List<AlertRecord> = emptyList(),
+    modelsReady: Boolean = true,
+    importingModels: Boolean = false,
+    importSummary: String? = null,
+    onImportModels: () -> Unit = {},
     onClearHistory: () -> Unit = {},
-    onDisable: () -> Unit = {}
+    onDisable: () -> Unit = {},
+    diagnostics: List<LogEntry> = emptyList(),
+    diagnosticsAutoScroll: Boolean = true,
+    onToggleAutoscroll: () -> Unit = {},
+    onClearDiagnostics: () -> Unit = {}
 ) {
+    var showDiagnostics by rememberSaveable { mutableStateOf(true) }
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Text(
             text = "Scam Detection",
@@ -61,18 +77,48 @@ fun DashboardScreen(
         )
         StatusRow(status = status, modifier = Modifier.padding(top = 8.dp))
 
+        ModelStatusCard(
+            modelsReady = modelsReady,
+            importingModels = importingModels,
+            importSummary = importSummary,
+            onImportModels = onImportModels,
+            modifier = Modifier.padding(top = 16.dp)
+        )
+
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = "Latest alert",
-            style = MaterialTheme.typography.titleMedium
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Latest alert",
+                style = MaterialTheme.typography.titleMedium
+            )
+            OutlinedButton(onClick = { showDiagnostics = !showDiagnostics }) {
+                Text(if (showDiagnostics) "Hide diagnostics" else "Show diagnostics")
+            }
+        }
         Spacer(modifier = Modifier.height(8.dp))
         if (history.isEmpty()) {
             EmptyAlertCard(onDisable = onDisable, modifier = Modifier.fillMaxWidth())
         } else {
             AlertCard(record = history.first(), modifier = Modifier.fillMaxWidth())
+        }
 
+        if (showDiagnostics) {
+            Spacer(modifier = Modifier.height(16.dp))
+            DiagnosticTerminalView(
+                entries = diagnostics,
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f),
+                autoScroll = diagnosticsAutoScroll,
+                onToggleAutoScroll = onToggleAutoscroll,
+                onClear = onClearDiagnostics
+            )
+        }
+
+        if (history.isNotEmpty()) {
             Spacer(modifier = Modifier.height(16.dp))
 
             Row(
@@ -97,6 +143,65 @@ fun DashboardScreen(
                 items(history, key = { it.occurredAtEpochMs }) { record ->
                     HistoryItem(record = record)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelStatusCard(
+    modelsReady: Boolean,
+    importingModels: Boolean,
+    importSummary: String?,
+    onImportModels: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (modelsReady) {
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .background(color = Color(0xFF2E7D32), shape = CircleShape)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Models ready",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFF2E7D32)
+            )
+        }
+        return
+    }
+
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Local models not installed. Point CheckScam at the folder "
+                    + "containing Llama-3.2-1B-Instruct-Q4_K_M.gguf and ggml-base.bin "
+                    + "to enable STT and scam analysis.",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center
+            )
+            if (importSummary != null) {
+                Text(
+                    text = importSummary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFD32F2F),
+                    textAlign = TextAlign.Center
+                )
+            }
+            Button(
+                onClick = onImportModels,
+                enabled = !importingModels
+            ) {
+                Text(if (importingModels) "Importing…" else "Import models")
             }
         }
     }

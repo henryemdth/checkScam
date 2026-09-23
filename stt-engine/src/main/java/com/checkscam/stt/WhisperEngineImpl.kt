@@ -28,8 +28,12 @@ class WhisperEngineImpl(
         Log.d(TAG, "whisper model initialized from $modelPath")
     }
 
-    fun initialize(): Boolean {
+    override fun initialize(): Boolean {
         return try {
+            // Idempotent: a restarted coordinator after a previous (successful)
+            // init must not loop on "already initialized". In whatever order the
+            // two init coroutines race, at most one native init happens.
+            if (nativeInitialized) return true
             initialize(modelCopyPath)
             true
         } catch (e: Exception) {

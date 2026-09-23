@@ -45,8 +45,14 @@ android {
         // Model binaries are already densely quantized/compressed; skip AAPT2
         // compression to avoid heap pressure on 700MB+ assets.
         noCompress += listOf("gguf", "bin")
-        // Ignore large models during APK packaging to speed up ADB installs
+        // Models are NOT bundled: the user imports them from storage once (SAF
+        // folder picker -> filesDir). Keeps the APK ~15MB. Grammar `.gbnf` and
+        // the small `.json` stay packaged.
         ignoreAssetsPattern = "!*.gguf:!*.bin"
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 }
 
@@ -62,6 +68,7 @@ dependencies {
     implementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.activity:activity-compose:1.9.3")
