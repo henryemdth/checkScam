@@ -4,19 +4,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -70,7 +68,12 @@ fun DashboardScreen(
     onClearDiagnostics: () -> Unit = {}
 ) {
     var showDiagnostics by rememberSaveable { mutableStateOf(true) }
-    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
         Text(
             text = "Scam Detection",
             style = MaterialTheme.typography.headlineSmall
@@ -111,7 +114,7 @@ fun DashboardScreen(
             Spacer(modifier = Modifier.height(16.dp))
             DiagnosticTerminalView(
                 entries = diagnostics,
-                modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f),
+                modifier = Modifier.fillMaxWidth().height(340.dp),
                 autoScroll = diagnosticsAutoScroll,
                 onToggleAutoScroll = onToggleAutoscroll,
                 onClear = onClearDiagnostics
@@ -136,11 +139,8 @@ fun DashboardScreen(
             }
             Spacer(modifier = Modifier.height(8.dp))
 
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 8.dp)
-            ) {
-                items(history, key = { it.occurredAtEpochMs }) { record ->
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                history.forEach { record ->
                     HistoryItem(record = record)
                 }
             }
